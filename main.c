@@ -14,19 +14,21 @@ void remove_snake_block();
 void add_snake_block();
 void generate_food();
 int parseInput();
+int start_game();
 
+
+// Constant game parameters
 const int DXN_UP = 3, DXN_DOWN = 5, DXN_LEFT = 2, DXN_RIGHT = 4;
 const int GAME_HEIGHT = 15; //y
-const int GAME_WIDTH = 37; //x
-const int LEVEL_MAX = 20;
-const int LEVEL_SPEED = 15;
+const int GAME_WIDTH = 42; //x
+const int LEVEL_MAX = 30;
+const int LEVEL_SPEED = 20;
 time_t t;
 
-// Linked List-esque
+// Doubly Linked List
 struct SnakeCell {
     int x;
     int y;
-    // Allow iteration from back to front
     struct SnakeCell* next;
     struct SnakeCell* prev;
 };
@@ -62,6 +64,30 @@ int main(){
     WINDOW_GAME = init_window(GAME_HEIGHT, GAME_WIDTH, getmaxy(WINDOW_TOP)+1, startx, 1);
     WINDOW_BOTTOM = init_window(5, GAME_WIDTH, getmaxy(WINDOW_GAME) + getmaxy(WINDOW_TOP)+1, startx, 1);
 
+    // Pre-Game UI Initialisation
+    mvwaddstr(WINDOW_TOP, 0, 1, "CNAKE: A Ripoff Game by nichyjt");
+    mvwaddstr(WINDOW_BOTTOM, 1, 1, "- WASD/Arrow Keys to move");
+    mvwaddstr(WINDOW_BOTTOM, 2, 1, "- Press 'q' to quit");
+    mvwaddstr(WINDOW_BOTTOM, 3, 1, "- Collect diamonds for points!");
+    wrefresh(WINDOW_TOP);
+    wrefresh(WINDOW_BOTTOM);
+    if(getch() == 'q'){
+        endwin();
+        return 0;
+    }
+
+    // Dangerous & spicy infinite loop
+    int retry = 1;
+    while(retry){
+        retry = start_game(WINDOW_TOP, WINDOW_GAME);
+    }
+    // Properly end ncurses mode
+    endwin();
+    return 0;
+}
+
+// TODO retry-able game logic
+int start_game(WINDOW* WINDOW_TOP, WINDOW* WINDOW_GAME){
     // Init Snake, its params and get its head and tail
     struct SnakeCell* head = malloc(sizeof(struct SnakeCell));
     int snakelen = 5;
@@ -76,20 +102,7 @@ int main(){
     food.y = 3*getmaxy(WINDOW_GAME)/4;
     mvwaddch(WINDOW_GAME, food.y, food.x, ACS_DIAMOND);
     wrefresh(WINDOW_GAME);
-
-    // Pre-Game UI Initialisation
-    mvwaddstr(WINDOW_TOP, 0, 1, "CNAKE: A Ripoff Game by nichyjt");
     
-    mvwaddstr(WINDOW_BOTTOM, 1, 1, "- WASD/Arrow Keys to move");
-    mvwaddstr(WINDOW_BOTTOM, 2, 1, "- Press 'q' to quit");
-    mvwaddstr(WINDOW_BOTTOM, 3, 1, "- Collect 'food' for points!");
-    wrefresh(WINDOW_TOP);
-    wrefresh(WINDOW_BOTTOM);
-    if(getch() == 'q'){
-        endwin();
-        return 0;
-    }
-
     // Main Loop and game variables
     int score = 0;
     char scoretext[20] = "Score: 0";
@@ -109,16 +122,13 @@ int main(){
     // Main game loop driver
     int timeout_duration = 400;
     timeout(timeout_duration);
-
-    // Dangerous & spicy infinite loop
+    // Add length to snake body if applicable
     while(1){
-        // Add length to snake body if applicable
         if( (input = getch()) == ERR) input = inertia;
         inertia = parseInput(input, inertia);
         if(inertia < 0) break;
-
         if(addCell){
-            printf("addcell");
+            //printf("addcell");
             addCell = 0;
             head = add_snake_cell(WINDOW_GAME, head, inertia);
         }
@@ -149,20 +159,25 @@ int main(){
                 wrefresh(WINDOW_GAME);
                 refresh();
                 redrawwin(WINDOW_GAME);
-                //printf("<%d,%d>",food.x, food.y);      
             }
         }else{
             //TODO add color and game over logic
-            mvwaddstr(WINDOW_TOP, 2, 12, "GAME OVER");
+            mvwaddstr(WINDOW_TOP, 2, 12, "GAME OVER! Press r to retry...");
             wrefresh(WINDOW_TOP);
             timeout(-1);
-            getch();
-            break;
+            while(input = getch()){
+                if(input == 'r'){
+                    werase(WINDOW_GAME);
+                    mvwaddstr(WINDOW_TOP, 2, 12, "                              "); //lol
+                    box(WINDOW_GAME, 0, 0);
+                    return 1;
+                }else if(input == 'q'){
+                    return 0;
+                }
+            }
+            return 0;
         }
     }
-    
-    // Properly end ncurses mode
-    endwin();
     return 0;
 }
 
@@ -283,6 +298,7 @@ void add_snake_block(WINDOW* window, int newx, int newy){
     mvwaddch(window, newy, newx, '#');
     wrefresh(window);
 }
+
 void remove_snake_block(WINDOW* window, int oldx, int oldy){
     mvwaddch(window, oldy, oldx, ' ');
     wrefresh(window);
@@ -302,15 +318,15 @@ int parseInput(int input, int inertia){
             break;
         case 's':
         case KEY_DOWN:
-            return (inertia%2 !=0)? inertia:DXN_DOWN;
+            return (inertia%2 != 0)? inertia:DXN_DOWN;
             break;
         case 'a':
         case KEY_LEFT:
-            return (inertia%2==0)? inertia:DXN_LEFT;
+            return (inertia%2 == 0)? inertia:DXN_LEFT;
             break;
         case 'd':
         case KEY_RIGHT:
-            return (inertia%2==0)? inertia:DXN_RIGHT;
+            return (inertia%2 == 0)? inertia:DXN_RIGHT;
             break;
         default:
             return inertia;
@@ -354,20 +370,4 @@ void generate_food(WINDOW* window, struct SnakeCell* head, struct Food *food){
     // printf("(%d:%d,%d)", i, food->x, food->y);
     mvwaddch(window, food->y, food->x, ACS_DIAMOND);
     wrefresh(window);
-}
-
-void debug_fill_window(WINDOW* window){
-    int mx, my;
-    getmaxyx(window, my, mx);
-    // Playing field starts from:
-    // Rows 1 to mx-1
-    // Columns 1 to my-1
-    for(int i=1; i<mx-1; ++i){
-        for(int j=1; j<my-1; ++j){
-            char ch = ACS_BULLET;
-            mvwaddch(window, j, i, ch);
-            wrefresh(window);
-        }
-        printf("\n");
-    } 
 }
