@@ -22,7 +22,7 @@ const int DXN_UP = 3, DXN_DOWN = 5, DXN_LEFT = 2, DXN_RIGHT = 4;
 const int GAME_HEIGHT = 15; //y
 const int GAME_WIDTH = 42; //x
 const int LEVEL_MAX = 30;
-const int LEVEL_SPEED = 20;
+const int LEVEL_SPEED = 25;
 time_t t;
 
 // Doubly Linked List
@@ -38,10 +38,8 @@ struct Food {
     int y;
 };
 
-// Driver function
 int main(){
     setlocale(LC_CTYPE,"C-UTF-8");
-    // TODO terminate early if the terminal scr is too small
 
     // Start ncurses with ctrlC acting as sigterm and noecho output to screen
     initscr();
@@ -53,7 +51,6 @@ int main(){
     refresh();
     curs_set(0);
 
-    //starty = (LINES - height)/2;
     int startx = (initx-50)/2;
 
     // Main Windows Init
@@ -86,7 +83,6 @@ int main(){
     return 0;
 }
 
-// TODO retry-able game logic
 int start_game(WINDOW* WINDOW_TOP, WINDOW* WINDOW_GAME){
     // Init Snake, its params and get its head and tail
     struct SnakeCell* head = malloc(sizeof(struct SnakeCell));
@@ -109,8 +105,7 @@ int start_game(WINDOW* WINDOW_TOP, WINDOW* WINDOW_GAME){
     char leveltext[20];
     sprintf(leveltext, "Level: 1/%d", LEVEL_MAX);
     // Level up every 2 pieces
-    // Level 1-5 Size Increase
-    // Level 6-10 Timeout duration decrease by 50ms
+    // Increase snake length then increase speed
     int level = 1;
     mvwaddstr(WINDOW_TOP, 1, 1, leveltext);
     mvwaddstr(WINDOW_TOP, 2, 1, scoretext);
@@ -122,13 +117,12 @@ int start_game(WINDOW* WINDOW_TOP, WINDOW* WINDOW_GAME){
     // Main game loop driver
     int timeout_duration = 400;
     timeout(timeout_duration);
-    // Add length to snake body if applicable
+    // Spicy infinite loop
     while(1){
         if( (input = getch()) == ERR) input = inertia;
         inertia = parseInput(input, inertia);
         if(inertia < 0) break;
         if(addCell){
-            //printf("addcell");
             addCell = 0;
             head = add_snake_cell(WINDOW_GAME, head, inertia);
         }
@@ -153,34 +147,34 @@ int start_game(WINDOW* WINDOW_TOP, WINDOW* WINDOW_GAME){
                 sprintf(leveltext, "Level: %d/%d", level, LEVEL_MAX);
                 mvwaddstr(WINDOW_TOP, 1,1, leveltext);
                 wrefresh(WINDOW_TOP);
-            }
-            if(mvwinch(WINDOW_GAME, food.y, food.x) != ACS_DIAMOND){
+            }else if(mvwinch(WINDOW_GAME, food.y, food.x) != ACS_DIAMOND){
                 mvwaddch(WINDOW_GAME, food.y, food.x, ACS_DIAMOND);  
                 wrefresh(WINDOW_GAME);
                 refresh();
                 redrawwin(WINDOW_GAME);
             }
         }else{
-            //TODO add color and game over logic
             mvwaddstr(WINDOW_TOP, 2, 12, "GAME OVER! Press r to retry...");
             wrefresh(WINDOW_TOP);
             timeout(-1);
             while(input = getch()){
                 if(input == 'r'){
+                    score = 0;
+                    sprintf(scoretext, "Score:     "); //lol
+                    mvwaddstr(WINDOW_TOP, 2,1, scoretext);
+                    wrefresh(WINDOW_TOP);
                     werase(WINDOW_GAME);
                     mvwaddstr(WINDOW_TOP, 2, 12, "                              "); //lol
                     box(WINDOW_GAME, 0, 0);
                     return 1;
                 }else if(input == 'q'){
-                    return 0;
+                    break;
                 }
             }
-            return 0;
         }
     }
     return 0;
 }
-
 
 WINDOW* init_window(int height, int width, int starty, int startx, int border){
     WINDOW* win;
@@ -214,7 +208,7 @@ struct SnakeCell* init_snake(WINDOW* window, struct SnakeCell *head, int initial
     return tail;
 }
 
-struct SnakeCell *add_snake_cell(WINDOW* window, struct SnakeCell *head, int inertia){
+struct SnakeCell* add_snake_cell(WINDOW* window, struct SnakeCell *head, int inertia){
     // Returns the new head
     struct SnakeCell *newhead = malloc(sizeof(struct SnakeCell));
     int newx, newy;
