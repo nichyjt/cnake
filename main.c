@@ -18,12 +18,14 @@ int start_game();
 
 
 // Constant game parameters
-const int DXN_UP = 3, DXN_DOWN = 5, DXN_LEFT = 2, DXN_RIGHT = 4;
-const int GAME_HEIGHT = 15; //y
-const int GAME_WIDTH = 42; //x
-const int LEVEL_MAX = 30;
-const int LEVEL_SPEED = 25;
+const int GAME_HEIGHT = 12; //y
+const int GAME_WIDTH = 40; //x
+const int LEVEL_MAX = GAME_WIDTH;
+// Last 5 levels are speedup levels
+const int LEVEL_SPEED = GAME_WIDTH-5;
 time_t t;
+// There's a reason for these oddly initialised numbers...
+const int DXN_UP = 3, DXN_DOWN = 5, DXN_LEFT = 2, DXN_RIGHT = 4;
 
 // Doubly Linked List
 struct SnakeCell {
@@ -49,11 +51,10 @@ int main(){
     noecho();
     keypad(stdscr, TRUE); //allow usage of fn keys
     refresh();
-    curs_set(0);
-
+    curs_set(0); //hide cursor to make it less ugly
     int startx = (initx-50)/2;
 
-    // Main Windows Init
+    // Main Windows Initialisation
     WINDOW *WINDOW_TOP;
     WINDOW *WINDOW_GAME;
     WINDOW *WINDOW_BOTTOM;
@@ -73,7 +74,6 @@ int main(){
         return 0;
     }
 
-    // Dangerous & spicy infinite loop
     int retry = 1;
     while(retry){
         retry = start_game(WINDOW_TOP, WINDOW_GAME);
@@ -83,8 +83,9 @@ int main(){
     return 0;
 }
 
+// A single game routine
 int start_game(WINDOW* WINDOW_TOP, WINDOW* WINDOW_GAME){
-    // Init Snake, its params and get its head and tail
+    // Init Snake, its coords and get its head and tail
     struct SnakeCell* head = malloc(sizeof(struct SnakeCell));
     int snakelen = 5;
     head->x = getmaxx(WINDOW_GAME)/2;
@@ -116,47 +117,49 @@ int start_game(WINDOW* WINDOW_TOP, WINDOW* WINDOW_GAME){
     int DXN = DXN_RIGHT;
     // Main game loop driver
     int timeout_duration = 400;
-    timeout(timeout_duration);
+    timeout(timeout_duration); //waits for input every timeout_duration (ms)
     // Spicy infinite loop
     while(1){
+        // User is slow/did not input anything
         if( (input = getch()) == ERR) input = inertia;
         inertia = parseInput(input, inertia);
         if(inertia < 0) break;
+        // Add length before parsing direction to make the movement smoother and more predictable
         if(addCell){
             addCell = 0;
             head = add_snake_cell(WINDOW_GAME, head, inertia);
         }
         // Get an input and validate correctness
         if(updateAndValidateSnake(WINDOW_GAME, head, tail, inertia)){
-            // Check if head coincides with the food.
-            // Update everything as necessary
+            // Point handling
             if(head->x == food.x && head->y == food.y){
                 sprintf(scoretext, "Score: %d", ++score);
                 mvwaddstr(WINDOW_TOP, 2,1, scoretext);
                 generate_food(WINDOW_GAME, head, &food);
-                // Handle lvl up logic
-                if(!(score%2) && level < LEVEL_MAX){
-                    ++level;
+                // Arbitrary lvl up logic
+                if(!(score%2) && level++ < LEVEL_MAX){
                     if(level<LEVEL_SPEED){
                         addCell = 1;
                     }else if(level<LEVEL_MAX){
                         timeout_duration-=50;
                         timeout(timeout_duration);
                     }
+                    // { level == LEVEL_MAX } do nothing
                 }
                 sprintf(leveltext, "Level: %d/%d", level, LEVEL_MAX);
                 mvwaddstr(WINDOW_TOP, 1,1, leveltext);
                 wrefresh(WINDOW_TOP);
             }else if(mvwinch(WINDOW_GAME, food.y, food.x) != ACS_DIAMOND){
+                // Handle edge case where the food spawns on the snake
                 mvwaddch(WINDOW_GAME, food.y, food.x, ACS_DIAMOND);  
                 wrefresh(WINDOW_GAME);
                 refresh();
-                redrawwin(WINDOW_GAME);
             }
         }else{
-            mvwaddstr(WINDOW_TOP, 2, 12, "GAME OVER! Press r to retry...");
+            // Snake has died
+            mvwaddstr(WINDOW_TOP, 2, 12, "GAME OVER! Press r to retry.");
             wrefresh(WINDOW_TOP);
-            timeout(-1);
+            timeout(-1); // disable timeout
             while(input = getch()){
                 if(input == 'r'){
                     score = 0;
@@ -185,7 +188,7 @@ WINDOW* init_window(int height, int width, int starty, int startx, int border){
 }
 
 struct SnakeCell* init_snake(WINDOW* window, struct SnakeCell *head, int initialSize){
-    // Returns the tail of the snake
+    // Returns the tail of the snake for manipulation
     struct SnakeCell *cell = head;
     // Populate the linked list
     while(initialSize-- > 1){
@@ -266,20 +269,17 @@ int updateAndValidateSnake(WINDOW * window, struct SnakeCell *head, struct Snake
     curr = curr->next;
 
     // Visit every non-head/tail cell and...
-    // ...check if the next tick/mvmt will cause issues
+    // ...check if the next tick/mvmt will cause issues (snake eat itself)
     while(curr->next != NULL){
         // Check if the new position touches any cell
-        if(newx == curr->x && newy == curr->y){
-            return 0;
-        }
-        
+        if(newx == curr->x && newy == curr->y) return 0;
         // No issue; update xy
         curr->x = curr->next->x;
         curr->y = curr->next->y;
         curr = curr->next;
     }
     // Snake has passed tick test (no self-collision)
-    // Curr is now the head
+    // Curr is now the head. Update its coordinates
     curr->x = newx;
     curr->y = newy;
     // Update the UI accordingly
@@ -299,9 +299,11 @@ void remove_snake_block(WINDOW* window, int oldx, int oldy){
 }
 
 int parseInput(int input, int inertia){
-    // Return -1 if quit
-    // Return 0 if invalid (opposite dxn)
-    // Return DXN_X if valid input
+    // Return -1 if quit is pressed
+    // Return DXN_* if input is valid
+    // UP/DOWN will always give a remainder of 1 when %2
+    // L/R will always give a remainder of 0 when %2
+    // Use this to check if the input should be ignored (snake carries on with its inertial dxn)
     switch(input){
         case 'q':
             return -1;
@@ -333,8 +335,8 @@ void generate_food(WINDOW* window, struct SnakeCell* head, struct Food *food){
     // head.y 1<=N<=GAME_WIDTH-1
 
     // Find out what coordinates are a no-go
-    int num_rows = GAME_HEIGHT-2;
-    int num_cols = GAME_WIDTH-2;
+    int num_rows = GAME_HEIGHT-3;
+    int num_cols = GAME_WIDTH-3;
     int matrix[(num_rows)*(num_cols)];
     // Contiguous index not working with the compiler.
     // So, using manual array instead to count appearances
@@ -343,7 +345,8 @@ void generate_food(WINDOW* window, struct SnakeCell* head, struct Food *food){
 
     int n;
     while(curr != NULL){
-        n = (curr->x-1)*(num_rows) + (curr->y-1)%(num_rows);
+        // n = (curr->x-1)*(num_rows) + (curr->y-1)%(num_rows);
+        n = ((curr->y-1)%num_rows*num_cols) + ((curr->x-1)%num_cols);
         ++matrix[n];
         curr = curr->prev;
     }
@@ -354,14 +357,13 @@ void generate_food(WINDOW* window, struct SnakeCell* head, struct Food *food){
     
     while(rnum>0){
         if(i>num_rows*num_cols) i = 0;
-        if(matrix[i]==0) --rnum;
-        ++i;
+        if(matrix[i++]==0) --rnum;
     }
   
     // Update food coords
+    // Counterintuitively, x refers to col y refers to row
     food->y = i/(num_cols)+1;
     food->x = i%(num_cols)+1;
-    // printf("(%d:%d,%d)", i, food->x, food->y);
     mvwaddch(window, food->y, food->x, ACS_DIAMOND);
     wrefresh(window);
 }
