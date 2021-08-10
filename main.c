@@ -46,14 +46,13 @@ int main(){
     // Start ncurses with ctrlC acting as sigterm and noecho output to screen
     initscr();
     int initx = getmaxx(stdscr);
-    int inity = getmaxy(stdscr);
+   // int inity = getmaxy(stdscr);
     cbreak();
     noecho();
     keypad(stdscr, TRUE); //allow usage of fn keys
     refresh();
     curs_set(0); //hide cursor to make it less ugly
-    int startx = (initx-50)/2;
-
+    int startx = (initx-GAME_WIDTH)/2;
     // Main Windows Initialisation
     WINDOW *WINDOW_TOP;
     WINDOW *WINDOW_GAME;
